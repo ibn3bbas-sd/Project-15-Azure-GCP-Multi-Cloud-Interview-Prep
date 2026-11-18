@@ -3,6 +3,8 @@
 Hands-on prep kit for a **Senior Cloud Engineer (Azure & GCP)** technical interview:
 hybrid/multi-cloud networking, security, governance, and Terraform + Azure DevOps automation.
 
+![High-Level Design — Azure & GCP multi-cloud landing zone](docs/hld-azure-gcp-multicloud.svg)
+
 It contains three things:
 
 1. **Question bank** (`docs/`) — 150+ interview Q&As with short, spoken-style answers.
@@ -16,6 +18,7 @@ It contains three things:
 ```
 Project-15-Azure-GCP-Multi-Cloud-Interview-Prep/
 ├── docs/
+│   ├── hld-azure-gcp-multicloud.svg      # HLD diagram (light/dark aware)
 │   ├── 00-interview-game-plan.md          # 30-min flow, pitch, questions to ask
 │   ├── 01-azure-hub-spoke-fortigate.md    # VNet, peering, UDR, FortiGate NVA HA, NSG, Bastion
 │   ├── 02-azure-appgw-waf.md              # App Gateway v2, WAF, SSL, routing
@@ -34,7 +37,9 @@ Project-15-Azure-GCP-Multi-Cloud-Interview-Prep/
 ├── pipelines/
 │   └── azure-pipelines.yml                # Validate → Plan → Approval → Apply (OIDC / WIF)
 └── scripts/
-    └── quiz.py                            # Flashcard drill from docs/*.md
+    ├── quiz.py                            # Flashcard drill from docs/*.md
+    ├── gen_hld.py                         # Regenerates the HLD SVG
+    └── assets/gcp-symbols.xml             # Google Cloud icons used by the HLD
 ```
 
 ---
@@ -83,13 +88,26 @@ done
 
 ---
 
+## Regenerate the HLD
+
+**PowerShell**
+```powershell
+python .\scripts\gen_hld.py
+```
+
+**WSL Ubuntu**
+```bash
+python3 scripts/gen_hld.py
+```
+
 ## How to study (night before)
 
-1. Read `docs/00-interview-game-plan.md` and rehearse the 60-second pitch out loud.
-2. Skim `docs/99-cheat-sheet.md`.
-3. Run `quiz.py` on weak areas (`--topic gcp`, `--topic terraform`).
-4. Walk through `terraform/azure-hub-spoke/main.tf` and explain each block in one sentence.
-5. Rehearse 3 STAR stories from `docs/10-star-stories.md`.
+1. Talk through the HLD left-to-right in 3 minutes (ingress → inspection → hybrid → GCP perimeter → delivery).
+2. Read `docs/00-interview-game-plan.md` and rehearse the 60-second pitch out loud.
+3. Skim `docs/99-cheat-sheet.md`.
+4. Run `quiz.py` on weak areas (`--topic gcp`, `--topic terraform`).
+5. Walk through `terraform/azure-hub-spoke/main.tf` and explain each block in one sentence.
+6. Rehearse 3 STAR stories from `docs/10-star-stories.md`.
 
 ## Author
 
