@@ -1,0 +1,112 @@
+# Terraform Plan -> Approval -> Apply on Azure DevOps
+# Auth: ARM service connection using Workload Identity Federation (OIDC, no secrets).
+# Approval: configure Approvals & checks on the "connectivity-prod" Environment.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [terraform/azure-hub-spoke/*]
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include: [terraform/azure-hub-spoke/*]
+
+variables:
+  tfVersion: '1.9.8'
+  workDir: '$(System.DefaultWorkingDirectory)/terraform/azure-hub-spoke'
+  serviceConnection: 'sc-connectivity-prod-wif'   # WIF service connection name
+
+pool:
+  vmImage: ubuntu-latest   # use a self-hosted / Managed DevOps Pool to reach private state
+
+stages:
+# ---------------------------------------------------------------- Validate
+- stage: Validate
+  jobs:
+  - job: static_checks
+    steps:
+    - script: |
+        curl -sSLo tf.zip https://releases.hashicorp.com/terraform/$(tfVersion)/terraform_$(tfVersion)_linux_amd64.zip
+        unzip -o tf.zip -d $(Agent.ToolsDirectory)/tf && echo "##vso[task.prependpath]$(Agent.ToolsDirectory)/tf"
+      displayName: Install Terraform
+    - script: |
+        terraform fmt -check -recursive
+        terraform init -backend=false
+        terraform validate
+      workingDirectory: $(workDir)
+      displayName: fmt / init / validate
+    - script: |
+        pip install --quiet checkov
+        checkov -d $(workDir) --framework terraform --soft-fail
+      displayName: Checkov security scan
+
+# ---------------------------------------------------------------- Plan
+- stage: Plan
+  dependsOn: Validate
+  jobs:
+  - job: plan
+    steps:
+    - script: |
+        curl -sSLo tf.zip https://releases.hashicorp.com/terraform/$(tfVersion)/terraform_$(tfVersion)_linux_amd64.zip
+        unzip -o tf.zip -d $(Agent.ToolsDirectory)/tf && echo "##vso[task.prependpath]$(Agent.ToolsDirectory)/tf"
+      displayName: Install Terraform
+    - task: AzureCLI@2
+      displayName: terraform plan (OIDC)
+      inputs:
+        azureSubscription: $(serviceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        addSpnToEnvironment: true          # exposes servicePrincipalId, tenantId, idToken
+        workingDirectory: $(workDir)
+        inlineScript: |
+          set -euo pipefail
+          export ARM_USE_OIDC=true
+          export ARM_CLIENT_ID=$servicePrincipalId
+          export ARM_TENANT_ID=$tenantId
+          export ARM_OIDC_TOKEN=$idToken
+          export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          terraform init -input=false
+          terraform plan -input=false -out=tfplan -var "subscription_id=$ARM_SUBSCRIPTION_ID"
+          terraform show -no-color tfplan > plan.txt
+    - publish: $(workDir)
+      artifact: tfplan
+      displayName: Publish plan artifact (sensitive - short retention)
+
+# ---------------------------------------------------------------- Apply
+- stage: Apply
+  dependsOn: Plan
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: apply
+    environment: connectivity-prod     # <- Approvals & checks + Exclusive lock live here
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: tfplan
+          - script: |
+              curl -sSLo tf.zip https://releases.hashicorp.com/terraform/$(tfVersion)/terraform_$(tfVersion)_linux_amd64.zip
+              unzip -o tf.zip -d $(Agent.ToolsDirectory)/tf && echo "##vso[task.prependpath]$(Agent.ToolsDirectory)/tf"
+            displayName: Install Terraform
+          - task: AzureCLI@2
+            displayName: terraform apply saved plan
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              addSpnToEnvironment: true
+              workingDirectory: $(Pipeline.Workspace)/tfplan
+              inlineScript: |
+                set -euo pipefail
+                export ARM_USE_OIDC=true
+                export ARM_CLIENT_ID=$servicePrincipalId
+                export ARM_TENANT_ID=$tenantId
+                export ARM_OIDC_TOKEN=$idToken
+                export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                chmod -R +x .terraform/providers || true
+                terraform init -input=false
+                terraform apply -input=false tfplan   # exactly what was reviewed

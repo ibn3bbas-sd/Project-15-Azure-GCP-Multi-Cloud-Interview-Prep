@@ -1,0 +1,21 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+plan.txt
+crash.log
+*.tfvars
+!example.tfvars
+override.tf
+override.tf.json
+
+# Quiz output
+review.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+__pycache__/
