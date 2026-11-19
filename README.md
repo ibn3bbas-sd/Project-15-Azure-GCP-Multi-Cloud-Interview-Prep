@@ -88,18 +88,6 @@ done
 
 ---
 
-## Regenerate the HLD
-
-**PowerShell**
-```powershell
-python .\scripts\gen_hld.py
-```
-
-**WSL Ubuntu**
-```bash
-python3 scripts/gen_hld.py
-```
-
 ## How to study (night before)
 
 1. Talk through the HLD left-to-right in 3 minutes (ingress → inspection → hybrid → GCP perimeter → delivery).
